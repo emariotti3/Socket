@@ -28,18 +28,26 @@
 #define NUMERIC_BASE 10
 #define BLOCKS_TO_READ 1
 #define PREFIX_SIZE 1
-#define EOF_CODE '2'
-#define CHKSUM_PREFIX '1'
+#define CHKSUM_PREFIX_C '1'
+#define EOF_CODE_C '2'
+#define CHKSUM_PREFIX_S '3'
+#define BN_PREFIX_S '4'
+#define EOF_CODE_S '5'
 #define SIZE_CHKS_STORE 1000
+#define NOT_FOUND -1
+
+typedef enum { BEGIN_READ, CHKS_FOUND, NO_CHKS_FOUND } state;
 
 /*******FUNCIONES DE USO COMUN*****************/
 
-void reverse_array(char *array, size_t size){
+void reverse_array(char array[], int size){
 
 	char reversed_array[size];
-	for(int i = 0; i < size;i++){
+
+	for(int i = 0; i < size; i++){
 		reversed_array[i] = array[size-1-i];
 	}
+
 	for (int i; i < size; i++){
 		array[i] = reversed_array[i];
 	}
@@ -75,7 +83,7 @@ void end_connection(socket_t *socket){
 
 /***************CLIENTE*****************************/
 
-int send_server_file_name(socket_t *client, char *argv[]){
+int send_server_file_name(socket_t *socket, char *argv[]){
 
 	size_t name_size = strlen(argv[POS_SERVER_FILE_NAME]);
 	
@@ -83,25 +91,25 @@ int send_server_file_name(socket_t *client, char *argv[]){
 	char name_length[BYTES_SIZE];
 	snprintf(name_length,BYTES_SIZE,"%d",(int)name_size);
 	
-	int success = socket_send(client, name_length, BYTES_SIZE);
+	int success = socket_send(socket, name_length, BYTES_SIZE);
 
 	if(success != OK){
 		return ERROR;	
 	} 
 
 	//CLIENT SENDS UPDATED FILE NAME:
-	return socket_send(client, argv[POS_SERVER_FILE_NAME], name_size);
+	return socket_send(socket, argv[POS_SERVER_FILE_NAME], name_size);
 
 }
 
-int send_server_block_size(socket_t *client, char *argv[]){
+int send_server_block_size(socket_t *socket, char *argv[]){
 
 	char block_size[BYTES_SIZE] = { *argv[POS_BLOCK_SIZE] };
-	return socket_send(client, block_size, BYTES_SIZE);
+	return socket_send(socket, block_size, BYTES_SIZE);
 
 }
 
-int send_server_file_checksums(socket_t *client, char *file, char *block_sz){
+int send_server_file_checksums(socket_t *socket, char *file, char *block_sz){
 
 	int block_size = atoi(block_sz);
 	FILE *outdated_local_file = fopen(file,"rb");
@@ -112,8 +120,8 @@ int send_server_file_checksums(socket_t *client, char *file, char *block_sz){
 	int chksums_total_amount = file_size / block_size;
 
     char current_block[block_size];
-    char eof_code[PREFIX_SIZE] = { EOF_CODE };
-    char chksum_prefix[PREFIX_SIZE] = { CHKSUM_PREFIX };
+    char eof_code[PREFIX_SIZE] = { EOF_CODE_C };
+    char chksum_prefix[PREFIX_SIZE] = { CHKSUM_PREFIX_C };
 
 	//PLACE POINTER AT BEGINNING OF FILE:
 	rewind(outdated_local_file);
@@ -133,7 +141,7 @@ int send_server_file_checksums(socket_t *client, char *file, char *block_sz){
 
 		if(!error_has_occurred){
 
-			success = socket_send(client, chksum_prefix, PREFIX_SIZE);
+			success = socket_send(socket, chksum_prefix, PREFIX_SIZE);
 			error_has_occurred = (error_has_occurred) || (success!=OK);
 
 		}
@@ -142,9 +150,9 @@ int send_server_file_checksums(socket_t *client, char *file, char *block_sz){
 
 			block_checksum = calculate_checksum(current_block, block_size);
 
-			char * a = ((char *)(&block_checksum));
+			char * new_checksum = ((char *)(&block_checksum));
 
-			success = socket_send(client, a, BYTES_SIZE);
+			success = socket_send(socket, new_checksum, BYTES_SIZE);
 
 			total_checksums_read++;	
 
@@ -158,7 +166,7 @@ int send_server_file_checksums(socket_t *client, char *file, char *block_sz){
 	bool eof_reached = (total_checksums_read == chksums_total_amount);
 
 	if(eof_reached){
-		socket_send(client, eof_code, PREFIX_SIZE);
+		socket_send(socket, eof_code, PREFIX_SIZE);
 		return OK;
 	}
 	
@@ -227,14 +235,99 @@ int trigger_client_mode(char *argv[]){
 
 /****************SERVER******************************/
 
-void save_received_checksum(char new_checksum[], char checksums_received, int chks_size){
+int get_checksum_block(char checksums[], char sought_chksm[], int chksm_size){
 
-	//reverse_array(new_checksum, chks_size);
+	//TODO: ver si se puede hacer mas eficiente esto!
+	int checksum_block = NOT_FOUND;
+	bool checksum_found;
+
+	reverse_array(sought_chksm, chksm_size);
+	
+	for ( int i = 0; checksums[i]; i += chksm_size){
+
+		if (checksum_block == NOT_FOUND){
+
+			checksum_found = true;
+			for (int j = 0; j < chksm_size; j++){
+
+				checksum_found = (checksum_found) && (checksums[j] == sought_chksm[j]);
+
+			}
+			if (checksum_found){
+				checksum_block = i;
+			}
+		}
+	}
+
+	return checksum_block;
+
+}
+
+int compare_local_file(socket_t *socket, FILE *local_file, char received_checksums[], int block_size, int chksm_size){
+
+	int success = OK;
+
+    char current_block[block_size];
+    char eof_code[PREFIX_SIZE] = { EOF_CODE_S };
+    char chksum_prefix[PREFIX_SIZE] = { CHKSUM_PREFIX_S };
+    char byte_chunk_prefix[PREFIX_SIZE] = { BN_PREFIX_S };
+
+	//READ FILE AND CALCULATE CHECKSUMS:
+	int block_checksum;
+	int block_number;
+	int blocks_read;
+
+	state current_state = BEGIN_READ;
+
+//	bool error_has_occurred = false;
+	bool eof_reached = (feof(local_file));
+
+	while(!eof_reached){
+
+		switch(current_state){
+
+			case(BEGIN_READ){
+
+				blocks_read = fread(current_block, block_size , BLOCKS_TO_READ, local_file);
+
+				block_checksum = calculate_checksum(current_block, block_size);
+
+				char * new_checksum = ((char *)(&block_checksum));
+
+	    		block_number = get_checksum_block(received_checksums, new_checksum, chksm_size);
+
+			}
+
+			case(CHKS_FOUND){
+
+
+			}
+
+			case(NO_CHKS_FOUND){
+
+				
+				
+			}
+
+		}
+
+				
+
+	    eof_reached = (feof(local_file));
+
+	}
+
+	if(eof_reached){
+		socket_send(socket, eof_code, PREFIX_SIZE);
+		return OK;
+	}
+	
+	return ERROR;
 
 
 }
 
-int receive_checksums(socket_t *listener, char *checksums_received, int chks_size, int size_chks_store){
+int receive_checksums(socket_t *socket, char *checksums_received, int chks_size, int size_chks_store){
 
 	char prefix_code[PREFIX_SIZE];
 	char new_checksum[chks_size];
@@ -246,9 +339,9 @@ int receive_checksums(socket_t *listener, char *checksums_received, int chks_siz
 	//RECEIVE CHECKSUMS FROM CLIENT;
 	while ( (!checksum_receive_complete) && (success == OK) ){
 
-		success = socket_receive(listener, prefix_code, PREFIX_SIZE);
+		success = socket_receive(socket, prefix_code, PREFIX_SIZE);
 
-		if(prefix_code[0] == EOF_CODE){
+		if(prefix_code[0] == EOF_CODE_C){
 
 			printf("EOF REACHED!\n");
 			checksum_receive_complete = true;
@@ -259,10 +352,13 @@ int receive_checksums(socket_t *listener, char *checksums_received, int chks_siz
 				checksums_received = realloc(checksums_received, size_chks_store);
 			}
 
-			success = socket_receive(listener, new_checksum, chks_size);
+			success = socket_receive(socket, new_checksum, chks_size);
+
+			//BECAUSE OF ENDIANNESS, ARRAY MUST BE REVERSED:
 			reverse_array(new_checksum, chks_size);
 
 			for(int i = 0; i < chks_size; i++){
+				
 				checksums_received[i + total_checksums_received] = new_checksum[i];
 			}
 
@@ -283,6 +379,7 @@ int receive_checksums(socket_t *listener, char *checksums_received, int chks_siz
 int trigger_server_mode(char *argv[]){
 
 	int success = 0;
+	int block_size = 0;
 	struct addrinfo hints;
 	struct addrinfo *ptr;
 	FILE *updated_local_file;
@@ -331,10 +428,11 @@ int trigger_server_mode(char *argv[]){
 
 	}
 
-	if(success == OK){
+	char block_sz[BYTES_SIZE];
 
-		char block_size[BYTES_SIZE];
-		success = socket_receive(&listener, block_size, BYTES_SIZE);
+	if(success == OK){
+		
+		success = socket_receive(&listener, block_sz, BYTES_SIZE);
 
 	}
 
@@ -346,8 +444,9 @@ int trigger_server_mode(char *argv[]){
 
 	if(success == OK){
 
+		block_size = atoi(block_sz);
 		updated_local_file = fopen(file_name,"rb");
-		compare_local_file(updated_local_file, checksums_received);
+		compare_local_file(&listener, updated_local_file, checksums_received, block_size, BYTES_SIZE);
 
 	}
 
