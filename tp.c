@@ -372,7 +372,7 @@ int compare_local_file(socket_t *socket, FILE *local_file, char received_checksu
 	rewind(local_file);
 
 	state current_state = BEGIN_READ;
-	bool eof_reached = (feof(local_file));
+	bool eof_reached = (ftell(local_file) > file_size);
 
 	while(!eof_reached){
 
@@ -405,7 +405,7 @@ int compare_local_file(socket_t *socket, FILE *local_file, char received_checksu
 				//GO BACK TO BEGINNING OF BLOCK ADD +1 TO THE AMOUNT OF CHARS
 				//THAT NEED TO BE SENT:
 
-				success = fseek(local_file, ftell(local_file) - (block_size + 1), SEEK_CUR);
+				success = fseek(local_file, ftell(local_file)-(block_size)+1, SEEK_CUR);
 
 				chars_saved += 1;
 
@@ -424,7 +424,7 @@ int compare_local_file(socket_t *socket, FILE *local_file, char received_checksu
 
 		}
 
-	    eof_reached = (feof(local_file));
+	    eof_reached = (ftell(local_file) > file_size);
 
 	}
 
@@ -561,13 +561,13 @@ int trigger_server_mode(char *argv[]){
 		block_size = atoi(block_sz);
 		updated_local_file = fopen(file_name,"rb");
 		compare_local_file(&listener, updated_local_file, checksums_received, block_size, BYTES_SIZE);
+		fclose(updated_local_file);
 
 	}
 
 	end_connection(&listener);
 	end_connection(&aceptor);
 	
-	fclose(updated_local_file);
 	free(checksums_received);
 
 	return SYSTEM_EXIT;
