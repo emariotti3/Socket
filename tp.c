@@ -27,6 +27,7 @@
 #define BYTES_SIZE 4
 #define NUMERIC_BASE 10
 #define BLOCKS_TO_READ 1
+#define BLOCKS_TO_WRITE 1
 #define PREFIX_SIZE 1
 #define CHKSUM_PREFIX_C '1'
 #define EOF_CODE_C '2'
@@ -36,7 +37,7 @@
 #define SIZE_CHKS_STORE 1000
 #define NOT_FOUND -1
 
-typedef enum { BEGIN_READ, CHKS_FOUND, NO_CHKS_FOUND } state;
+typedef enum { BEGIN_READ, CHKS_FOUND, NO_CHKS_FOUND, NO_CHKS_END_READ } state;
 
 /*******FUNCIONES DE USO COMUN*****************/
 
@@ -95,10 +96,9 @@ int send_server_block_size(socket_t *socket, char *argv[]){
 
 }
 
-int send_server_file_checksums(socket_t *socket, char *file, char *block_sz){
+int send_server_file_checksums(socket_t *socket, FILE *outdated_local_file, char *block_sz){
 
 	int block_size = atoi(block_sz);
-	FILE *outdated_local_file = fopen(file,"rb");
 
     //CALCULATE CHECKSUM TOTAL AMOUNT:
 	fseek(outdated_local_file, 0, SEEK_END);
@@ -119,20 +119,20 @@ int send_server_file_checksums(socket_t *socket, char *file, char *block_sz){
 	int success = OK;
 	bool error_has_occurred = false;
 
-    while( (total_checksums_read < chksums_total_amount) && !error_has_occurred ){
+    while ( (total_checksums_read < chksums_total_amount) && !error_has_occurred ){
 
 		blocks_read = fread(current_block, block_size , BLOCKS_TO_READ, outdated_local_file);
 
 		error_has_occurred = ( blocks_read != BLOCKS_TO_READ ) && (total_checksums_read < chksums_total_amount);
 
-		if(!error_has_occurred){
+		if (!error_has_occurred){
 
 			success = socket_send(socket, chksum_prefix, PREFIX_SIZE);
 			error_has_occurred = (error_has_occurred) || (success!=OK);
 
 		}
 		
-		if(!error_has_occurred){
+		if (!error_has_occurred){
 
 			block_checksum = calculate_checksum(current_block, block_size);
 
@@ -148,7 +148,6 @@ int send_server_file_checksums(socket_t *socket, char *file, char *block_sz){
 					
 	}
 
-	fclose(outdated_local_file);
 	bool eof_reached = (total_checksums_read == chksums_total_amount);
 
 	if(eof_reached){
@@ -159,21 +158,23 @@ int send_server_file_checksums(socket_t *socket, char *file, char *block_sz){
 	return ERROR;
  }
 
-int receive_info_and_create_file(socket_t *socket, FILE *new_file){
+int receive_info_and_create_file(socket_t *socket, FILE *new_file, FILE *old_file, int block_size){
 
-	char prefix_code[PREFIX_SIZE];
+	char prefix_code[PREFIX_SIZE+1];
+	char old_block[block_size];
 
 	char chunk_size[BYTES_SIZE];
 	char chunk[BYTES_SIZE];
-	int chunk_length;
+	int *chunk_length;
 
 	char block_number[BYTES_SIZE];
-	int block;	
+	int *block_pos;	
 	
 	int success = OK;
-	bool info_receive_complete = false;
 	
-	//RECEIVE CHECKSUMS FROM CLIENT;
+	
+	//RECEIVE CHECKSUMS FROM CLIENT:
+	bool info_receive_complete = false;
 	while ( (!info_receive_complete) && (success == OK) ){
 
 		success = socket_receive(socket, prefix_code, PREFIX_SIZE);
@@ -184,26 +185,40 @@ int receive_info_and_create_file(socket_t *socket, FILE *new_file){
 
 				printf("RECV End of file \n");
 				info_receive_complete = true;
+				break;
 
 			case(CHUNK_PREFIX_S):
 
 				success = socket_receive(socket, chunk_size, BYTES_SIZE);
-				chunk_length = atoi(chunk_size);
-				printf("RECV File chunk %d bytes \n", chunk_length);
-				socket_receive(socket, chunk, chunk_length);
+				chunk_length = (int*)(chunk_size);
+				printf("RECV File chunk %d bytes \n", *chunk_length);
+				socket_receive(socket, chunk, *chunk_length);
+
+				fwrite(chunk, *chunk_length ,BLOCKS_TO_WRITE, new_file);
+				break;
 
 			case(BN_PREFIX_S):
 
 				success = socket_receive(socket, block_number, BYTES_SIZE);
-				block = atoi(block_number);
-				printf("RECV Block index %d \n", block);
+				block_pos = (int*)(block_number);
+				printf("RECV Block index %d \n", *block_pos);
+
+				//WRITE BLOCK FROM OLD FILE IN NEW FILE:
+				fseek(old_file, (*block_pos)*block_size, SEEK_SET);
+				fread(old_block, block_size, BLOCKS_TO_READ, old_file);
+				fwrite(old_block, block_size ,BLOCKS_TO_WRITE, new_file);
+
+				break;
 
 		}
 
 	}
 
-	if(success!=OK){
+
+	if (success != OK){
+
 		return ERROR;
+
 	}
 	
 	return OK;
@@ -213,8 +228,7 @@ int receive_info_and_create_file(socket_t *socket, FILE *new_file){
 int trigger_client_mode(char *argv[]){
 
 	struct addrinfo hints;
-	struct addrinfo *result;
-	FILE *new_file;
+	struct addrinfo *results;
 
 	socket_t client;
 
@@ -223,21 +237,21 @@ int trigger_client_mode(char *argv[]){
 	//***********INITIALIZE CLIENT***********//
 
 	memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET;       /* IPv4 */
-    hints.ai_socktype = SOCK_STREAM; /* TCP */
+    hints.ai_family = AF_INET;       
+    hints.ai_socktype = SOCK_STREAM; 
     hints.ai_flags = 0;
 
-    success = getaddrinfo(argv[POS_HOSTNAME_C], argv[POS_PORT_C], &hints, &result);
+    success = getaddrinfo(argv[POS_HOSTNAME_C], argv[POS_PORT_C], &hints, &results);
 
     if (success == OK){
 
-   		success = socket_init(&client, result);
+   		success = socket_init(&client, results);
 
     }
 
     if (success == OK){
 
-   		success = socket_connect(&client,result);
+   		success = socket_connect(&client,results);
 
     }
 
@@ -256,20 +270,38 @@ int trigger_client_mode(char *argv[]){
 
     }
 
+	FILE *old_file = fopen(argv[POS_OLD_FILE_NAME], "rb");
+	FILE *new_file = fopen(argv[POS_NEW_FILE_NAME], "w");
+
+	if ( (old_file == NULL) || (new_file == NULL) ){
+
+		success = ERROR;
+
+	}
+
     if (success == OK){
     	//Client sends file checksums to server:
-   		success = send_server_file_checksums(&client, argv[POS_OLD_FILE_NAME], argv[POS_BLOCK_SIZE]);
+   		success = send_server_file_checksums(&client, old_file, argv[POS_BLOCK_SIZE]);
 
     }
 
     if (success == OK){
-
-    	new_file = fopen(argv[POS_NEW_FILE_NAME], "rb");
-    	receive_info_and_create_file(&client, new_file);
-    	fclose(new_file);
+    	int block_size = atoi(argv[POS_BLOCK_SIZE]);
+    	receive_info_and_create_file(&client, new_file, old_file, block_size);
+    	
     }
 
-	//TODO: RECEIVE AND WRITE NEW FILE!
+    if (old_file != NULL){
+
+		fclose(old_file);
+
+	}
+
+	if (new_file != NULL){
+
+		fclose(new_file);
+
+	}
 
 	end_connection(&client);
 
@@ -292,11 +324,11 @@ int get_checksum_block_number(char checksums[], char sought_chksm[], int chksm_s
 			checksum_found = true;
 			for (int j = 0; j < chksm_size; j++){
 
-				checksum_found = (checksum_found) && (checksums[j] == sought_chksm[j]);
+				checksum_found = (checksum_found) && (checksums[i+j] == sought_chksm[j]);
 
 			}
 			if (checksum_found){
-				checksum_block = i;
+				checksum_block = i / chksm_size;
 			}
 		}
 	}
@@ -305,33 +337,29 @@ int get_checksum_block_number(char checksums[], char sought_chksm[], int chksm_s
 
 }
 
-int send_chunk(socket_t * socket, FILE *local_file, int chars_saved, int file_size){
+int send_chunk(socket_t * socket, char chunk_to_send[], int chars_saved){
 
 	int success = OK;
-	char chars_to_send[file_size];
+
 	char byte_chunk_prefix[PREFIX_SIZE] = { CHUNK_PREFIX_S };
 
 	if (chars_saved > 0){
 
-		//READ AL THE CHARS THAT NEED TO BE SENT TO CLIENT 
-		//AND STORE THEM IN char chars_to_send[]:
-		fseek(local_file, -(ftell(local_file) - chars_saved), SEEK_CUR);
-
-		success = fread(chars_to_send, chars_saved, BLOCKS_TO_READ, local_file);
-
 		//SEND CHARACTERS THAT DIDN'T MATCH CHECKSUMS:
 		//FIRST SEND PREFIX 0x03:
-		socket_send(socket, byte_chunk_prefix, PREFIX_SIZE);
+		success += socket_send(socket, byte_chunk_prefix, PREFIX_SIZE);
 
 		//SEND BYTE CHUNK LENGTH:
 		char * length = ((char *)(&chars_saved));
-		socket_send(socket, length, BYTES_SIZE);
+		success += socket_send(socket, length, BYTES_SIZE);
 
 		//SEND CHARACTERS:
-		socket_send(socket, chars_to_send, chars_saved);
+		success += socket_send(socket, chunk_to_send, chars_saved);
+
 	}
 
 	return success;
+
 }
 
 int send_block_number(socket_t *socket, int block_number){
@@ -356,31 +384,31 @@ int send_block_number(socket_t *socket, int block_number){
 int compare_local_file(socket_t *socket, FILE *local_file, char received_checksums[], int block_size, int chksm_size){
 
 	int success = OK;
-    char current_block[block_size];
-    char eof_code[PREFIX_SIZE] = { EOF_CODE_S };
-    
-
 	int block_checksum;
 	int block_number;
-	int blocks_read;
 	int chars_saved = 0;
+	int qty_final_read = 0;
 
 	//INITIALIZE VARIABLE CONTAINING FILE SIZE
 	//TO USE WHEN STORING BYTE CHUNK:
 	fseek(local_file, 0, SEEK_END);
-	int file_size = ftell(local_file);
+	int file_size = ftell(local_file) - 1;
 	rewind(local_file);
 
-	state current_state = BEGIN_READ;
-	bool eof_reached = (ftell(local_file) > file_size);
+    char current_block[block_size];
+    char eof_code[PREFIX_SIZE] = { EOF_CODE_S };
+    char chunk_to_send[file_size];
 
-	while(!eof_reached){
+
+	state current_state = BEGIN_READ;
+
+	while(!feof(local_file)){
 
 		switch(current_state){
 
 			case(BEGIN_READ):
 
-				blocks_read = fread(current_block, block_size , BLOCKS_TO_READ, local_file);
+				fread(current_block, block_size , BLOCKS_TO_READ, local_file);
 
 				block_checksum = calculate_checksum(current_block, block_size);
 
@@ -390,7 +418,16 @@ int compare_local_file(socket_t *socket, FILE *local_file, char received_checksu
 
 	    		if(block_number == NOT_FOUND){
 
-	    			current_state = NO_CHKS_FOUND;
+	    			if((ftell(local_file) >= file_size)){
+
+	    				current_state = NO_CHKS_END_READ;
+
+	    			}else{
+
+	    				current_state = NO_CHKS_FOUND;
+
+	    			}
+	    			
 
 	    		}else{
 
@@ -400,37 +437,57 @@ int compare_local_file(socket_t *socket, FILE *local_file, char received_checksu
 
 	    		break;
 
-			case(NO_CHKS_FOUND):
+			case(NO_CHKS_FOUND):		
 
-				//GO BACK TO BEGINNING OF BLOCK ADD +1 TO THE AMOUNT OF CHARS
-				//THAT NEED TO BE SENT:
+				fseek(local_file, -block_size, SEEK_CUR);
 
-				success = fseek(local_file, ftell(local_file)-(block_size)+1, SEEK_CUR);
+				fread(chunk_to_send + chars_saved, BLOCKS_TO_READ, BLOCKS_TO_READ, local_file);
 
 				chars_saved += 1;
+
+				current_state = BEGIN_READ;
 
 				break;			
 
 			case(CHKS_FOUND):
 				
-				send_chunk(socket, local_file, chars_saved, file_size);
+				success += send_chunk(socket, chunk_to_send, chars_saved);
 
-				send_block_number(socket, block_number);
+				success += send_block_number(socket, block_number);
 
 				//ONCE CHARS+BN HAVE BEEN SENT GO BACK TO THE BLOCK WHERE CHECKSUM WAS FOUND:
+
 				current_state = BEGIN_READ;
 
 				chars_saved = 0;
 
-		}
+				break;
 
-	    eof_reached = (ftell(local_file) > file_size);
+			case(NO_CHKS_END_READ):
+
+				//CALCULATE THE ACTUAL AMOUNT OF NON-EMPTY CHARACTERS READ:
+				qty_final_read = block_size - (ftell(local_file) - file_size);
+
+				//RE-READ LAST BLOCK SO THAT ITS CHARACTERS ARE INCLUDED IN char chars_saved[]:
+
+				fseek(local_file, -block_size, SEEK_CUR);
+
+				fread(chunk_to_send + chars_saved, block_size , BLOCKS_TO_READ, local_file);
+
+				chars_saved += qty_final_read;
+
+				success += send_chunk(socket, chunk_to_send, chars_saved);
+
+				//GET TO END OF FILE:
+				fread(current_block, block_size , BLOCKS_TO_READ, local_file);
+
+			break;
+
+		}
 
 	}
 
-	if(eof_reached){
-
-		send_chunk(socket, local_file, chars_saved, file_size);
+	if (feof(local_file) && (success == OK)){
 
 		socket_send(socket, eof_code, PREFIX_SIZE);
 
@@ -439,7 +496,6 @@ int compare_local_file(socket_t *socket, FILE *local_file, char received_checksu
 	}
 	
 	return ERROR;
-
 
 }
 
@@ -496,7 +552,6 @@ int trigger_server_mode(char *argv[]){
 	int block_size = 0;
 	struct addrinfo hints;
 	struct addrinfo *ptr;
-	FILE *updated_local_file;
 	char file_name_size[BYTES_SIZE];
 	char *checksums_received = malloc(SIZE_CHKS_STORE * sizeof(char));
 
@@ -556,13 +611,19 @@ int trigger_server_mode(char *argv[]){
 
 	}
 
+	FILE *outdated_local_file = fopen(file_name, "rb");
+
+	if(outdated_local_file == NULL){
+
+		success = ERROR;
+
+	}
+
 	if(success == OK){
 
 		block_size = atoi(block_sz);
-		updated_local_file = fopen(file_name,"rb");
-		compare_local_file(&listener, updated_local_file, checksums_received, block_size, BYTES_SIZE);
-		fclose(updated_local_file);
-
+		compare_local_file(&listener, outdated_local_file, checksums_received, block_size, BYTES_SIZE);
+		fclose(outdated_local_file);
 	}
 
 	end_connection(&listener);
