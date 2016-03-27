@@ -34,7 +34,7 @@
 #define CHUNK_PREFIX_S '3'
 #define BN_PREFIX_S '4'
 #define EOF_CODE_S '5'
-#define SIZE_CHKS_STORE 1000
+#define STORE_SIZE 1000
 #define NOT_FOUND -1
 
 typedef enum { BEGIN_READ, CHKS_FOUND, NO_CHKS_FOUND, NO_CHKS_END_READ } state;
@@ -164,7 +164,7 @@ int receive_info_and_create_file(socket_t *socket, FILE *new_file, FILE *old_fil
 	char old_block[block_size];
 
 	char chunk_size[BYTES_SIZE];
-	char chunk[BYTES_SIZE];
+	char chunk[STORE_SIZE];
 	int *chunk_length;
 
 	char block_number[BYTES_SIZE];
@@ -392,7 +392,7 @@ int compare_local_file(socket_t *socket, FILE *local_file, char received_checksu
 	//INITIALIZE VARIABLE CONTAINING FILE SIZE
 	//TO USE WHEN STORING BYTE CHUNK:
 	fseek(local_file, 0, SEEK_END);
-	int file_size = ftell(local_file) - 1;
+	int file_size = ftell(local_file);
 	rewind(local_file);
 
     char current_block[block_size];
@@ -553,7 +553,7 @@ int trigger_server_mode(char *argv[]){
 	struct addrinfo hints;
 	struct addrinfo *ptr;
 	char file_name_size[BYTES_SIZE];
-	char *checksums_received = malloc(SIZE_CHKS_STORE * sizeof(char));
+	char *checksums_received = malloc(STORE_SIZE * sizeof(char));
 
 	socket_t aceptor;
 	socket_t listener;
@@ -607,7 +607,7 @@ int trigger_server_mode(char *argv[]){
 
 	if(success == OK){
 
-		success = receive_checksums(&listener, checksums_received, BYTES_SIZE, SIZE_CHKS_STORE);
+		success = receive_checksums(&listener, checksums_received, BYTES_SIZE, STORE_SIZE);
 
 	}
 
