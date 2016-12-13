@@ -1,0 +1,8 @@
+#ifndef _CHECKSUM_H
+#define _CHECKSUM_H
+
+//RECEIVES POINTER TO CHARACTER ARRAY BLOCK AND ITS LENGTH
+//RETURNS CALCULATED CHECKSUM FOR THOSE CHARACTERS.
+int calculate_checksum(char block[], int block_size);
+
+#endif
