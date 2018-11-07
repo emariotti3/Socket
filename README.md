@@ -1,5 +1,8 @@
 # Introducción  
 
+
+
+
 Supongamos que hay dos computadoras, A y B, conectadas en red. Supongamos que en la computadora A hay un archivo F1 y en la B
 hay un archivo muy similar a F1 llamado F2.¿Cómo se puede hacer para que la computadora A pueda tener una copia de F2?
 Una solución trivial es simplemente conectarse a B y copiar todo el contenido de F2 en A. Pero si el canal de comunicación entre
