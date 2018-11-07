@@ -15,9 +15,6 @@ algoritmo para sincronizar  dos archivos. 
 
 # Formato de Línea de Comandos
 
-
-
-
 Hay dos formas de ejecutar el programa: una en modo servidor que tendrá la versión actualizada de un  archivo en particular; 
 el otro, modo cliente, que tiene una versión desactualizada de un archivo y se  conectará al server para actualizarlo.
 
@@ -33,6 +30,6 @@ cliente va a crear (este no existe aún);  new_remote_file  es el no
 archivo no se  encuentra en la maquina del cliente sino en la del server (es remoto). El parametro block_size es es tamaño en 
 bytes de los bloques usados en el cálculo del checksum.   
 
-Códigos de Retorno 
+# Códigos de Retorno 
 
 El programa retorna 1  si hubo un error en los parametros. En todo otra situación, retorna  0.
