@@ -1,8 +1,5 @@
 # Introducción  
 
-
-
-
 Supongamos que hay dos computadoras, A y B, conectadas en red. Supongamos que en la computadora A hay un archivo F1 y en la B
 hay un archivo muy similar a F1 llamado F2.¿Cómo se puede hacer para que la computadora A pueda tener una copia de F2?
 Una solución trivial es simplemente conectarse a B y copiar todo el contenido de F2 en A. Pero si el canal de comunicación entre
@@ -16,7 +13,7 @@ tiene en común con F1 y qué partes  son distintas calculando efecti
 envia a A quien reconstruye finalmente F2. En este trabajo práctico se implementará una versión reducida y simplificada del 
 algoritmo para sincronizar  dos archivos. 
 
-Formato de Línea de Comandos
+# Formato de Línea de Comandos
 
 Hay dos formas de ejecutar el programa: una en modo servidor que tendrá la versión actualizada de un  archivo en particular; 
 el otro, modo cliente, que tiene una versión desactualizada de un archivo y se  conectará al server para actualizarlo.
