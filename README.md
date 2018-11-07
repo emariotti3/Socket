@@ -15,6 +15,9 @@ algoritmo para sincronizar  dos archivos. 
 
 # Formato de Línea de Comandos
 
+
+
+
 Hay dos formas de ejecutar el programa: una en modo servidor que tendrá la versión actualizada de un  archivo en particular; 
 el otro, modo cliente, que tiene una versión desactualizada de un archivo y se  conectará al server para actualizarlo.
 
