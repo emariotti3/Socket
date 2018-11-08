@@ -18,7 +18,8 @@ Para ejecutar en modo servidor:   
 
 Donde  port  es el puerto o servicio en donde escuchara el socket.
 
-Para ejecutar en modo cliente:    ./tp client hostname port old_local_file new_local_file new_remote_file  block_size 
+Para ejecutar en modo cliente:    
+  **./tp client hostname port old_local_file new_local_file new_remote_file  block_size** 
 
 Los parámetros hostname y port  son el hostname/IP y el servicio/puerto del server remoto.  Donde  old_local_file  es el archivo
 que se desea actualizar y que el cliente tiene acceso (es local a la  maquina); new_local_file  es el nombre del archivo que el
