@@ -275,9 +275,9 @@ void server_compare_and_send_chksms(server_t *self){
 
 	if(server_state_is_valid(self)){
 		self->state = compare_file(&self->listener,
-									local_file,
-									self->chksms,
-									self->block_size);
+				local_file,
+				self->chksms,
+				self->block_size);
 	}
 
 	if(local_file != NULL){
