@@ -30,3 +30,7 @@ bytes de los bloques usados en el cálculo del checksum.   
 El programa retorna 1  si hubo un error en los parametros. 
 
 En todo otra situación, retorna  0.
+
+# Integrantes
+
+- [Maria Eugenia Mariotti](https://github.com/emariotti3)
