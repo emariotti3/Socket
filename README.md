@@ -12,7 +12,7 @@
 
 # Formato de Línea de Comandos
 
-Hay dos formas de ejecutar el programa: una en modo servidor que tendrá la versión actualizada de un  archivo en particular; 
+Hay dos formas de ejecutar el programa: una en modo servidor que tendrá la versión actualizada de un  archivo en particular; 
 el otro, modo cliente, que tiene una versión desactualizada de un archivo y se  conectará al server para actualizarlo.
 
 Para ejecutar en modo servidor:   
@@ -25,7 +25,7 @@ Para ejecutar en modo cliente:   
 
   **./tp client hostname port old_local_file new_local_file new_remote_file  block_size** 
 
-Los parámetros hostname y port  son el hostname/IP y el servicio/puerto del server remoto.  Donde  *old_local_file* es el archivo que se desea actualizar y que el cliente tiene acceso (es local a la  maquina); new_local_file es el nombre del archivo que el cliente va a crear (este no existe aún);  new_remote_file es el nombre del archivo que tiene la versión actualizada pero este archivo no se  encuentra en la maquina del cliente sino en la del server (es remoto). El parametro block_size es es tamaño en 
+Los parámetros hostname y port  son el hostname/IP y el servicio/puerto del server remoto.  Donde  *old_local_file* es el archivo que se desea actualizar y que el cliente tiene acceso (es local a la  maquina); new_local_file es el nombre del archivo que el cliente va a crear (este no existe aún);  new_remote_file es el nombre del archivo que tiene la versión actualizada pero este archivo no se  encuentra en la maquina del cliente sino en la del server (es remoto). El parametro block_size es es tamaño en 
 
 bytes de los bloques usados en el cálculo del checksum.   
 
@@ -37,4 +37,4 @@ En todo otra situación, retorna  0.
 
 # Integrantes
 
-- [Maria Eugenia Mariotti](https://github.com/emariotti3)
+- [Maria Eugenia Mariotti](https://github.com/emariotti3){:target="_blank"}
