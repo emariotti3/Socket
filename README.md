@@ -39,4 +39,4 @@
 
 # Integrantes
 
-<a href="https://github.com/emariotti3" target="_blank">Maria Eugenia Mariotti</a>
+<a href="https://github.com/emariotti3" rel="nofollow" target="_blank">Maria Eugenia Mariotti</a>
